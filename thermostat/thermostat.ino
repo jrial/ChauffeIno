@@ -16,9 +16,10 @@ TODO:
 
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <LiquidCrystal.h>
 #include <RFM12B.h>
 #include <avr/sleep.h>
+#include <LiquidCrystal.h>
+#include <ChauffeinoDisplay.h>
 
 // Global vars - generic
 uint8_t tempUpPin = 4;
@@ -27,6 +28,8 @@ uint8_t sleepSeconds = 20;
 const uint8_t bufferSize = 3;
 uint8_t bufferPos = 0;
 float buffer[bufferSize];
+String room;
+float heatDemand = 16.0;
 
 // RFM128B
 #define BOOT_NODEID 127  //network ID used for this unit at boot time
@@ -46,7 +49,8 @@ DallasTemperature sensors(&oneWire);
 DeviceAddress sensor;
 
 // LCD
-LiquidCrystal lcd(14, 15, 16, 17, 18, 19);
+uint8_t lcdPins[] = {14, 15, 16, 17, 18, 19};
+ChauffeinoDisplay display(lcdPins);
 
 
 void setup() 
@@ -54,11 +58,8 @@ void setup()
     // Setup serial line for debugging
     Serial.begin(9600);
     // Setup LCD
-    for (int i = 14; i <= 19; i++) {
-        pinMode(i, OUTPUT);
-    }
-    lcd.begin(16, 2);
-    lcd.println("Chauffeino");
+    display.setDimensions(2, 16);
+    display.print("Chauffeino", 0, 0);
     // Setup thermal sensor
     pinMode(sensorPin, INPUT);
     sensors.begin();
@@ -69,7 +70,8 @@ void setup()
         for (uint8_t i = 0; i < 8; i++) {
             sensor_string += sensor[i];
         }
-        Serial.println(sensor_string);
+        room = sensor_string;
+        Serial.println(room);
         if (sensor[0] == 0x28)
             sensors.setResolution(sensor, 12);
         else if (sensor[0] == 0x10 or sensor[0] == 0x22)
@@ -79,11 +81,10 @@ void setup()
             exit(1);
         }
         int resolution = sensors.getResolution(sensor);
-        Serial.print("Temp resolution: ");
-        Serial.println(resolution, DEC);
-        lcd.setCursor(0, 1);
-        lcd.print("Res: ");
-        lcd.println(resolution, DEC);
+        char res[16];
+        sprintf(res, "Res: %d", resolution);
+        Serial.println(res);
+        display.print(res, 1, 0);
         // With that done, let's get ourselves a node ID, shall we?
         /*
         radio.Initialize(BOOT_NODEID, RF12_433MHZ, NETWORKID);
@@ -104,10 +105,15 @@ void loop()
     // Get temperature in °C
     Serial.println("Requesting temperature");
     sensors.requestTemperaturesByAddress(sensor);
-    // delay(750); // Maybe not necessary?
     float tempC = sensors.getTempC(sensor);
+    // Update display
+    display.setId(room);
+    display.setTemperatures(tempC, heatDemand);
+    display.clear();
     Serial.print("Temperature: ");
     Serial.println(tempC);
+    display.printTemperatures();
+    display.printId();
     // and store it in the output buffer at position bufferPos.
     buffer[bufferPos] = tempC;
     // rotate to next position in output buffer.

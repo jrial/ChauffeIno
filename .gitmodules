@@ -1,0 +1,6 @@
+[submodule "libraries/RFM12B"]
+	path = libraries/RFM12B
+	url = https://github.com/LowPowerLab/RFM12B.git
+[submodule "libraries/TemperatureControl"]
+	path = libraries/TemperatureControl
+	url = https://github.com/milesburton/Arduino-Temperature-Control-Library.git
