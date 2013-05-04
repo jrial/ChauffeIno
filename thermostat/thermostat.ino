@@ -72,9 +72,9 @@ void setup()
         }
         room = sensor_string;
         Serial.println(room);
-        if (sensor[0] == 0x28)
+        if (sensor[0] == DS18S20MODEL || sensor[0] == DS1825MODEL || sensor[0] == DS1822MODEL)
             sensors.setResolution(sensor, 12);
-        else if (sensor[0] == 0x10 or sensor[0] == 0x22)
+        else if (sensor[0] == DS18S20MODEL)
             sensors.setResolution(sensor, 9);
         else {
             Serial.println("Sensors found, but not Dallas DS18x20 family.\nTerminating.");
@@ -110,10 +110,10 @@ void loop()
     display.setId(room);
     display.setTemperatures(tempC, heatDemand);
     display.clear();
-    Serial.print("Temperature: ");
-    Serial.println(tempC);
     display.printTemperatures();
     display.printId();
+    Serial.print("Temperature: ");
+    Serial.println(tempC);
     // and store it in the output buffer at position bufferPos.
     buffer[bufferPos] = tempC;
     // rotate to next position in output buffer.
