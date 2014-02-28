@@ -37,7 +37,7 @@ float heatDemand = 16.0;
 #define GATEWAYID     1  //the node ID we're sending to
 #define ACK_TIME     50  // # of ms to wait for an ack
 #define SERIAL_BAUD  115200
-uint8_t nodeid; 
+uint8_t nodeid;
 uint8_t KEY[] = "SOMERANDOMSTRING";
 RFM12B radio;
 bool requestACK=true;
@@ -53,7 +53,7 @@ uint8_t lcdPins[] = {14, 15, 16, 17, 18, 19};
 ChauffeinoDisplay display(lcdPins);
 
 
-void setup() 
+void setup()
 {
     // Setup serial line for debugging
     Serial.begin(9600);
@@ -72,7 +72,7 @@ void setup()
         }
         room = sensor_string;
         Serial.println(room);
-        if (sensor[0] == DS18S20MODEL || sensor[0] == DS1825MODEL || sensor[0] == DS1822MODEL)
+        if (sensor[0] == DS18B20MODEL || sensor[0] == DS1825MODEL || sensor[0] == DS1822MODEL)
             sensors.setResolution(sensor, 12);
         else if (sensor[0] == DS18S20MODEL)
             sensors.setResolution(sensor, 9);
@@ -100,7 +100,7 @@ void setup()
 }
 
 
-void loop() 
+void loop()
 {
     // Get temperature in °C
     Serial.println("Requesting temperature");
