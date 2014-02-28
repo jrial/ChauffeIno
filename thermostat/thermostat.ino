@@ -80,7 +80,8 @@ void setup()
             sensors.setResolution(sensor, 9);
         else {
             Serial.println("Sensors found, but not Dallas DS18x20 family.\nTerminating.");
-            exit(1);
+            display.print("SENSOR ERROR!!!", 1, 0);
+            LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
         }
         int resolution = sensors.getResolution(sensor);
         char res[16];
@@ -97,7 +98,8 @@ void setup()
         */
     } else {
         Serial.println("No sensors found.\nTerminating.");
-        exit(1);
+        display.print("SENSOR ERROR!!!", 1, 0);
+        LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     }
 }
 
