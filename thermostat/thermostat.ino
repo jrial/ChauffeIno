@@ -19,12 +19,12 @@ TODO:
 #include <RFM12B.h>
 #include <avr/sleep.h>
 #include <LiquidCrystal.h>
+#include <LowPower.h>
 #include <ChauffeinoDisplay.h>
 
 // Global vars - generic
 uint8_t tempUpPin = 4;
 uint8_t tempDownPin = 5;
-uint8_t sleepSeconds = 20;
 const uint8_t bufferSize = 3;
 uint8_t bufferPos = 0;
 float buffer[bufferSize];
@@ -55,6 +55,8 @@ ChauffeinoDisplay display(lcdPins);
 
 void setup()
 {
+    radio.Initialize(BOOT_NODEID, RF12_433MHZ, NETWORKID);
+    radio.Sleep(RF12_SLEEP);
     // Setup serial line for debugging
     Serial.begin(9600);
     // Setup LCD
@@ -129,6 +131,5 @@ void loop()
         }
         // FIXME: listen for commands from controller
     }
-    // FIXME: Sleep with interrupt instead of delay.
-    delay(sleepSeconds*1000);
+    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
 }
