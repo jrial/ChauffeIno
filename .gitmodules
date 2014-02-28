@@ -4,3 +4,6 @@
 [submodule "libraries/TemperatureControl"]
 	path = libraries/TemperatureControl
 	url = https://github.com/milesburton/Arduino-Temperature-Control-Library.git
+[submodule "libraries/Low-Power"]
+	path = libraries/Low-Power
+	url = git@github.com:rocketscream/Low-Power.git
