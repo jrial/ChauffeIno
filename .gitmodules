@@ -7,3 +7,6 @@
 [submodule "libraries/Low-Power"]
 	path = libraries/Low-Power
 	url = git@github.com:rocketscream/Low-Power.git
+[submodule "hardware/Moteino"]
+	path = hardware/Moteino
+	url = https://github.com/LowPowerLab/Moteino
