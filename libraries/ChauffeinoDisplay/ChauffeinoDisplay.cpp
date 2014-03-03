@@ -11,8 +11,13 @@ void ChauffeinoDisplay::print(String text, int row, int col) {
     LiquidCrystal::print(text);
 }
 
+void ChauffeinoDisplay::clearRow(int row) {
+    print("                ", row, 0);
+}
+
 void ChauffeinoDisplay::printTemperatures(bool low_batt) {
-    char tempString [16];
+    clearRow(0);
+    char tempString [17];
     dtostrf(tempMeasured, 1, 1, &tempString[0]);
     dtostrf(tempRequested, 1, 1, &tempString[5]);
     tempString[4] = '/';
@@ -23,6 +28,7 @@ void ChauffeinoDisplay::printTemperatures(bool low_batt) {
 }
 
 void ChauffeinoDisplay::printId() {
+    clearRow(1);
     print(roomId, 1, 0);
 }
 

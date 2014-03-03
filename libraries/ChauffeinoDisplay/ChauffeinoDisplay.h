@@ -14,6 +14,7 @@ class ChauffeinoDisplay: public LiquidCrystal {
         // I find row, col more intuitive...
        void setDimensions(int rows, int cols);
        void print(String text, int row, int col);
+       void clearRow(int row);
        void printTemperatures(bool low_batt);
        void printId();
        void setTempRequested(float temp);
