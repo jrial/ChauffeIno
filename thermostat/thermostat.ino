@@ -64,7 +64,7 @@ void setup()
     radio.Initialize(BOOT_NODEID, RF12_433MHZ, NETWORKID);
     radio.Sleep(RF12_SLEEP);
     // Setup serial line for debugging
-    Serial.begin(9600);
+    Serial.begin(SERIAL_BAUD);
     // Setup LCD
     display.setDimensions(2, 16);
     display.print("Chauffeino", 0, 0);
@@ -87,6 +87,7 @@ void setup()
         else {
             Serial.println("Sensors found, but not Dallas DS18x20 family.\nTerminating.");
             display.print("SENSOR ERROR!!!", 1, 0);
+            Serial.flush();
             LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
         }
         int resolution = sensors.getResolution(sensor);
@@ -105,6 +106,7 @@ void setup()
     } else {
         Serial.println("No sensors found.\nTerminating.");
         display.print("SENSOR ERROR!!!", 1, 0);
+        Serial.flush();
         LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     }
 }
@@ -200,4 +202,4 @@ int readVccMv() {
   //result = 1125300L / result; // Calculate Vcc (in mV); 1125300 = 1.1*1023*1000
   result = scaleConst / result; // Calculate Vcc (in mV); 1125300 = 1.1*1023*1000
   return (int)result; // Vcc in millivolts
- }
+}
