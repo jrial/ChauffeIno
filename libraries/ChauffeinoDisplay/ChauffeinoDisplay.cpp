@@ -11,11 +11,14 @@ void ChauffeinoDisplay::print(String text, int row, int col) {
     LiquidCrystal::print(text);
 }
 
-void ChauffeinoDisplay::printTemperatures() {
+void ChauffeinoDisplay::printTemperatures(bool low_batt) {
     char tempString [16];
     dtostrf(tempMeasured, 1, 1, &tempString[0]);
     dtostrf(tempRequested, 1, 1, &tempString[5]);
     tempString[4] = '/';
+    if (low_batt) {
+        strcat(tempString, " BATT!");
+    }
     print(tempString, 0, 0);
 }
 

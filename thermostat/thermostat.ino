@@ -42,6 +42,12 @@ uint8_t KEY[] = "SOMERANDOMSTRING";
 RFM12B radio;
 bool requestACK=true;
 
+// Battery related
+int8_t batt_counter=-1;
+bool low_batt = false;
+uint16_t min_vcc = 2750;
+const long scaleConst = 1156.300 * 1000 ; // internalRef * 1023 * 1000;
+
 // DS18x20
 int sensorPin = 3;
 OneWire oneWire(sensorPin);
@@ -106,6 +112,14 @@ void setup()
 
 void loop()
 {
+    // Check battery level every hour
+    batt_counter = (batt_counter + 1) % 60;
+    // Resetting Low Battery warning should require a reset or restart
+    if (! low_batt && batt_counter == 0) {
+        if (readVccMv() < min_vcc) {
+            low_batt = true;
+        }
+    }
     // Get temperature in °C
     Serial.println("Requesting temperature");
     sensors.requestTemperaturesByAddress(sensor);
@@ -114,7 +128,7 @@ void loop()
     display.setId(room);
     display.setTemperatures(tempC, heatDemand);
     display.clear();
-    display.printTemperatures();
+    display.printTemperatures(low_batt);
     display.printId();
     Serial.print("Temperature: ");
     Serial.println(tempC);
@@ -135,3 +149,55 @@ void loop()
     }
     LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
 }
+
+/*
+  Check battery level; return external voltage,
+  calculated against high-precision 1.1V internal
+  VREF.
+  Taken from http://code.google.com/p/tinkerit/wiki/SecretVoltmeter
+  */
+// long readVccMv() {
+//     long result;
+//     // Read 1.1V reference against AVcc
+//     ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+//     delay(2); // Wait for Vref to settle
+//     ADCSRA |= _BV(ADSC); // Convert
+//     while (bit_is_set(ADCSRA,ADSC));
+//     result = ADCL;
+//     result |= ADCH<<8;
+//     result =  1126400L / result; // Back-calculate AVcc in mV
+//     return (uint16_t) result;
+// }
+
+// Better ReadVcc method.
+// Taken from http://www.rcgroups.com/forums/showthread.php?t=1874973
+int readVccMv() {
+    // Read 1.1V reference against AVcc
+    // set the reference to Vcc and the measurement to the internal 1.1V reference
+// Leonardo, Micro, Esplora, Duemilanove, Mega 2560, Mega ADK
+#if defined(__AVR_ATmega32U4__) || defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+    ADMUX = _BV(REFS0) | _BV(MUX4) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+// No clue, not planning to look it up
+#elif defined (__AVR_ATtiny24__) || defined(__AVR_ATtiny44__) || defined(__AVR_ATtiny84__)
+    ADMUX = _BV(MUX5) | _BV(MUX0);
+// No clue, not planning to look it up
+#elif defined (__AVR_ATtiny25__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__)
+    ADMUX = _BV(MUX3) | _BV(MUX2);
+// All others
+#else
+    ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+#endif
+
+  delay(2); // Wait for Vref to settle
+  ADCSRA |= _BV(ADSC); // Start conversion
+  while (bit_is_set(ADCSRA,ADSC)); // measuring
+
+  uint8_t low  = ADCL; // must read ADCL first - it then locks ADCH
+  uint8_t high = ADCH; // unlocks both
+
+  long result = (high<<8) | low;
+
+  //result = 1125300L / result; // Calculate Vcc (in mV); 1125300 = 1.1*1023*1000
+  result = scaleConst / result; // Calculate Vcc (in mV); 1125300 = 1.1*1023*1000
+  return (int)result; // Vcc in millivolts
+ }
