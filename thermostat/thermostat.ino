@@ -37,6 +37,7 @@ float heatDemand = 16.0;
 #define GATEWAYID     1  //the node ID we're sending to
 #define ACK_TIME     50  // # of ms to wait for an ack
 #define SERIAL_BAUD  115200
+#define FREQUENCY RF12_433MHZ
 uint8_t nodeid;
 uint8_t KEY[] = "SOMERANDOMSTRING";
 RFM12B radio;
@@ -61,7 +62,7 @@ ChauffeinoDisplay display(lcdPins);
 
 void setup()
 {
-    radio.Initialize(BOOT_NODEID, RF12_433MHZ, NETWORKID);
+    radio.Initialize(BOOT_NODEID, FREQUENCY, NETWORKID);
     radio.Sleep(RF12_SLEEP);
     // Setup serial line for debugging
     Serial.begin(SERIAL_BAUD);
@@ -97,7 +98,7 @@ void setup()
         display.print(res, 1, 0);
         // With that done, let's get ourselves a node ID, shall we?
         /*
-        radio.Initialize(BOOT_NODEID, RF12_433MHZ, NETWORKID);
+        radio.Initialize(BOOT_NODEID, FREQUENCY, NETWORKID);
         radio.Encrypt(KEY);
         String msg = "request_node_id ";
         msg += sensor_string;
