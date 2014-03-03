@@ -62,10 +62,11 @@ ChauffeinoDisplay display(lcdPins);
 
 void setup()
 {
-    radio.Initialize(BOOT_NODEID, FREQUENCY, NETWORKID);
-    radio.Sleep(RF12_SLEEP);
     // Setup serial line for debugging
     Serial.begin(SERIAL_BAUD);
+    Serial.println("Thermostat initialising");
+    radio.Initialize(BOOT_NODEID, FREQUENCY, NETWORKID);
+    radio.Sleep(RF12_SLEEP);
     // Setup LCD
     display.setDimensions(2, 16);
     display.print("Chauffeino", 0, 0);
@@ -93,7 +94,7 @@ void setup()
         }
         int resolution = sensors.getResolution(sensor);
         char res[16];
-        sprintf(res, "Res: %d", resolution);
+        sprintf(res, "Sensor resolution: %d", resolution);
         Serial.println(res);
         display.print(res, 1, 0);
         // With that done, let's get ourselves a node ID, shall we?
@@ -110,6 +111,7 @@ void setup()
         flushSerial();
         LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     }
+    Serial.println("Thermostat initialisation complete.");
 }
 
 
