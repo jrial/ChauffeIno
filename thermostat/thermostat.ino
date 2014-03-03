@@ -149,7 +149,12 @@ void loop()
         }
         // FIXME: listen for commands from controller
     }
-    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+    // Sleep for a minute
+    Serial.flush();
+    for (int i=0; i<6; i++) {
+        LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+        LowPower.powerDown(SLEEP_2S, ADC_OFF, BOD_OFF);
+    }
 }
 
 /*
