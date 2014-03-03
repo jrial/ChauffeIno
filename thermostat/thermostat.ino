@@ -140,14 +140,14 @@ void loop()
     bufferPos = (bufferPos + 1) % bufferSize;
     // If buffer full, report wirelessly and clear buffer
     if (not bufferPos) {
-        // FIXME: report *wirelessly*
+        // TODO: report *wirelessly*
         for (int i = 0; i < bufferSize; i++) {
             Serial.print("Temp ");
             Serial.print(i);
             Serial.print(": ");
             Serial.println(buffer[i]);
         }
-        // FIXME: listen for commands from controller
+        // TODO: listen for commands from controller
     }
     // Sleep for a minute
     Serial.flush();
