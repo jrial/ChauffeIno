@@ -88,7 +88,7 @@ void setup()
         else {
             Serial.println("Sensors found, but not Dallas DS18x20 family.\nTerminating.");
             display.print("SENSOR ERROR!!!", 1, 0);
-            Serial.flush();
+            flushSerial();
             LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
         }
         int resolution = sensors.getResolution(sensor);
@@ -107,7 +107,7 @@ void setup()
     } else {
         Serial.println("No sensors found.\nTerminating.");
         display.print("SENSOR ERROR!!!", 1, 0);
-        Serial.flush();
+        flushSerial();
         LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     }
 }
@@ -151,11 +151,20 @@ void loop()
         // TODO: listen for commands from controller
     }
     // Sleep for a minute
-    Serial.flush();
+    flushSerial();
     for (int i=0; i<6; i++) {
         LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
         LowPower.powerDown(SLEEP_2S, ADC_OFF, BOD_OFF);
     }
+}
+
+// Helper method to properly flush; HardwareSerial::flush() seems broken
+// See http://forum.arduino.cc/index.php?topic=151014.0, esp. this post:
+// http://forum.arduino.cc/index.php?topic=151014.msg1344132#msg1344132
+void flushSerial() {
+    while (!(UCSR0A & (1 << UDRE0)))  // Wait for empty transmit buffer
+    UCSR0A |= 1 << TXC0;  // mark transmission not complete
+    while (!(UCSR0A & (1 << TXC0)));   // Wait for the transmission to complete
 }
 
 /*
