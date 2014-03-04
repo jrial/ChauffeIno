@@ -3,7 +3,7 @@ Chauffeino Controller
 
 The Short
 ---------
-The controller is a Raspberry Pi unit, receiving sensor data through the receiver (Moteino). It holds the programming, per room warm-up data and all the temperature logs from the various sensor nodes. It uses this data to decide when to activate the heating circuits and whether to turn the burner on or off.
+The controller is a BeagleBone Black unit, receiving sensor data through the receiver (Moteino). It holds the programming, per room warm-up data and all the temperature logs from the various sensor nodes. It uses this data to decide when to activate the heating circuits and whether to turn the burner on or off.
 
 Configuration happens via a web interface, with possible future expansions including mobile apps.
 
