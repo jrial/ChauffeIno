@@ -16,11 +16,11 @@ TODO:
 
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <RFM12B.h>
+#include <RFM69.h>
 #include <avr/sleep.h>
-#include <LiquidCrystal.h>
 #include <LowPower.h>
-#include <ChauffeinoDisplay.h>
+#include <SPI.h>
+//#include <ChauffeinoDisplay.h>
 
 // Global vars - generic
 uint8_t tempUpPin = 4;
@@ -28,19 +28,19 @@ uint8_t tempDownPin = 5;
 const uint8_t bufferSize = 3;
 uint8_t bufferPos = 0;
 float buffer[bufferSize];
-String room;
 float heatDemand = 16.0;
-
-// RFM128B
-#define BOOT_NODEID 127  //network ID used for this unit at boot time
-#define NETWORKID    98  //the network ID we are on
-#define GATEWAYID     1  //the node ID we're sending to
-#define ACK_TIME     50  // # of ms to wait for an ack
 #define SERIAL_BAUD  115200
-#define FREQUENCY RF12_433MHZ
-uint8_t nodeid;
-uint8_t KEY[] = "SOMERANDOMSTRING";
-RFM12B radio;
+
+// RFM69
+// #define BOOT_NODEID 127  //network ID used for this unit at boot time
+#define NETWORKID   98  //the network ID we are on
+#define GATEWAYID   1  //the node ID we're sending to
+#define ACK_TIME    50  // # of ms to wait for an ack
+#define FREQUENCY   RF69_433MHZ
+#define NODEID      10
+// uint8_t nodeid;
+const char KEY[] = "SOMERANDOMSTRING";
+RFM69 radio;
 bool requestACK=true;
 
 // Battery related
@@ -54,10 +54,18 @@ int sensorPin = 3;
 OneWire oneWire(sensorPin);
 DallasTemperature sensors(&oneWire);
 DeviceAddress sensor;
+char sensorString[8];
 
 // LCD
-uint8_t lcdPins[] = {14, 15, 16, 17, 18, 19};
-ChauffeinoDisplay display(lcdPins);
+// uint8_t lcdPins[] = {14, 15, 16, 17, 18, 19};
+// ChauffeinoDisplay display(lcdPins);
+
+typedef struct {
+    int           nodeId;   // ID of the node (later this will be autodiscovered; for now hardcoded)
+    char          sensorId[16]; // ID of the sensor; this is the node's ID card on the netwwork
+    float         temp;     // Temperature
+} Payload;
+Payload reportData;
 
 
 void setup()
@@ -65,38 +73,46 @@ void setup()
     // Setup serial line for debugging
     Serial.begin(SERIAL_BAUD);
     Serial.println("Thermostat initialising");
-    radio.Initialize(BOOT_NODEID, FREQUENCY, NETWORKID);
-    radio.Sleep(RF12_SLEEP);
+    radio.initialize(FREQUENCY,NODEID,NETWORKID);
+    radio.encrypt(KEY);
+    char buff[50];
+    sprintf(buff, "\nTransmitting at %d Mhz...", FREQUENCY==RF69_433MHZ ? 433 : FREQUENCY==RF69_868MHZ ? 868 : 915);
+    Serial.println(buff);
+    sprintf(buff, "Encryption key: %s", KEY);
+    Serial.println(buff);
+    radio.sleep();
     // Setup LCD
-    display.setDimensions(2, 16);
-    display.print("Chauffeino", 0, 0);
+    // display.setDimensions(2, 16);
+    // display.print("Chauffeino", 0, 0);
     // Setup thermal sensor
     pinMode(sensorPin, INPUT);
     sensors.begin();
     if (sensors.getDeviceCount()) {
         sensors.getAddress(sensor, 0);
-        Serial.print("Sensor address: ");
-        String sensor_string = "";
+        char sensorString[16];
+        char tmp_hex[2];
         for (uint8_t i = 0; i < 8; i++) {
-            sensor_string += sensor[i];
+            sprintf(tmp_hex, "%02x", sensor[i]);
+            sensorString[i*2] = tmp_hex[0];
+            sensorString[i*2+1] = tmp_hex[1];
+            // sensorString[i*2] =  sensor[i];
         }
-        room = sensor_string;
-        Serial.println(room);
+        sprintf(buff, "Sensor ID: %s", sensorString);
+        Serial.println(buff);
         if (sensor[0] == DS18B20MODEL || sensor[0] == DS1825MODEL || sensor[0] == DS1822MODEL)
             sensors.setResolution(sensor, 12);
         else if (sensor[0] == DS18S20MODEL)
             sensors.setResolution(sensor, 9);
         else {
             Serial.println("Sensors found, but not Dallas DS18x20 family.\nTerminating.");
-            display.print("SENSOR ERROR!!!", 1, 0);
+            // display.print("SENSOR ERROR!!!", 1, 0);
             flushSerial();
             LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
         }
         int resolution = sensors.getResolution(sensor);
-        char res[16];
-        sprintf(res, "Sensor resolution: %d", resolution);
-        Serial.println(res);
-        display.print(res, 1, 0);
+        sprintf(buff, "Sensor resolution: %d", resolution);
+        Serial.println(buff);
+        // display.print(buff, 1, 0);
         // With that done, let's get ourselves a node ID, shall we?
         /*
         radio.Initialize(BOOT_NODEID, FREQUENCY, NETWORKID);
@@ -105,9 +121,13 @@ void setup()
         msg += sensor_string;
         radio.Send(GATEWAYID, &msg, msg.length());
         */
+        reportData.nodeId = NODEID;
+        for (uint8_t i = 0; i<16; i++) {
+            reportData.sensorId[i] = sensorString[i];
+        }
     } else {
         Serial.println("No sensors found.\nTerminating.");
-        display.print("SENSOR ERROR!!!", 1, 0);
+        // display.print("SENSOR ERROR!!!", 1, 0);
         flushSerial();
         LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     }
@@ -130,17 +150,22 @@ void loop()
     sensors.requestTemperaturesByAddress(sensor);
     float tempC = sensors.getTempC(sensor);
     // Update display
-    display.setId(room);
-    display.setTemperatures(tempC, heatDemand);
-    display.clear();
-    display.printTemperatures(low_batt);
-    display.printId();
+    // display.setId(room);
+    // display.setTemperatures(tempC, heatDemand);
+    // display.clear();
+    // display.printTemperatures(low_batt);
+    // display.printId();
     Serial.print("Temperature: ");
     Serial.println(tempC);
     // and store it in the output buffer at position bufferPos.
     buffer[bufferPos] = tempC;
     // rotate to next position in output buffer.
     bufferPos = (bufferPos + 1) % bufferSize;
+    reportData.temp = tempC;
+    if (radio.sendWithRetry(GATEWAYID, (const void*)(&reportData), sizeof(reportData)))
+      Serial.print(" ok!");
+    else Serial.print(" nothing...");
+    Serial.println();
     // If buffer full, report wirelessly and clear buffer
     if (not bufferPos) {
         // TODO: report *wirelessly*
@@ -154,10 +179,11 @@ void loop()
     }
     // Sleep for a minute
     flushSerial();
-    for (int i=0; i<6; i++) {
-        LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-        LowPower.powerDown(SLEEP_2S, ADC_OFF, BOD_OFF);
-    }
+    // for (int i=0; i<6; i++) {
+    //     LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+    //     LowPower.powerDown(SLEEP_2S, ADC_OFF, BOD_OFF);
+    // }
+    LowPower.powerDown(SLEEP_2S, ADC_OFF, BOD_OFF);
 }
 
 // Helper method to properly flush; HardwareSerial::flush() seems broken
