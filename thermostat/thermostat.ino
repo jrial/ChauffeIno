@@ -9,10 +9,12 @@ is transmitted back to the thermostat.
 
 /*
 TODO:
-* Wireless reporting
-* Wireless feedback from controller
+* New generic display code
 * Override buttons
 */
+
+// Which screen have we got hooked up?
+#define SCREEN_HD44780
 
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -20,28 +22,45 @@ TODO:
 #include <avr/sleep.h>
 #include <LowPower.h>
 #include <SPI.h>
-//#include <ChauffeinoDisplay.h>
+// Select correct screen library
+#ifdef SCREEN_HD44780
+// Due to Arduino sillyness, if I don't include it here, it won't be found when
+// compiling ChauffeinoDisplayHD44780.h, yet it also has to be included there,
+// as does Arduino.h or ChauffeinoDisplayHD44780.cpp won't compile. Ugh...
+#include <LiquidCrystal.h>
+#include <ChauffeinoDisplayHD44780.h>
+#elif SCREEN_PCD8544
+#include <ChauffeinoDisplayPDC8544.h>
+
+#endif
 
 // Global vars - generic
 uint8_t tempUpPin = 4;
 uint8_t tempDownPin = 5;
 const uint8_t bufferSize = 3;
-uint8_t bufferPos = 0;
 float buffer[bufferSize];
 float heatDemand = 16.0;
 #define SERIAL_BAUD  115200
+#define LED         9
+
 
 // RFM69
 // #define BOOT_NODEID 127  //network ID used for this unit at boot time
-#define NETWORKID   98  //the network ID we are on
-#define GATEWAYID   1  //the node ID we're sending to
-#define ACK_TIME    50  // # of ms to wait for an ack
-#define FREQUENCY   RF69_433MHZ
-#define NODEID      10
+#define NETWORKID       98      //the network ID we are on
+#define GATEWAYID       1       //the node ID we're sending to
+#define ACK_TIME        100     // # of ms to wait for an ack
+#define FREQUENCY       RF69_433MHZ
+#define NODEID          2
+#define SLEEP_LOOPS     1       // How many 8s loops to sleep before entering loop() again?
+#define RECV_TIMEOUT    1000    // How long to wait for a reply from the base station after sending
 // uint8_t nodeid;
 const char KEY[] = "SOMERANDOMSTRING";
 RFM69 radio;
 bool requestACK=true;
+bool promiscuousMode = false;   //set to 'true' to sniff all packets on the same network
+unsigned long lastSend = 0;     // When did we last send a temperature measurement to the node?
+bool failNotified = false;      // To ensure we print "no reply yet" only once.
+
 
 // Battery related
 int8_t batt_counter=-1;
@@ -55,35 +74,45 @@ OneWire oneWire(sensorPin);
 DallasTemperature sensors(&oneWire);
 DeviceAddress sensor;
 char sensorString[8];
+unsigned long lastTempRequest = 0;
+int  delayInMillis = 0;
+int8_t resolution = 9;
+float tempC;
 
 // LCD
-// uint8_t lcdPins[] = {14, 15, 16, 17, 18, 19};
-// ChauffeinoDisplay display(lcdPins);
+ChauffeinoDisplay display;
 
 typedef struct {
-    int           nodeId;   // ID of the node (later this will be autodiscovered; for now hardcoded)
-    char          sensorId[16]; // ID of the sensor; this is the node's ID card on the netwwork
-    float         temp;     // Temperature
-} Payload;
-Payload reportData;
+    char        sensorId[16];   // ID of the sensor; this is the node's ID card on the netwwork
+    float       temp;           // Temperature
+    bool        low_batt;       // Low battery indicator
+} tempStruct;
+tempStruct reportData;
 
+typedef struct {
+    char        curDate[10];    // To display the date on the thermostat nodes
+    char        curTime[5];     // To display the time on the thermostat nodes
+    float       targetTemp;     // Target temperature in thermostat node's room
+    bool        burner;         // Burner is on (water is being heated)
+    bool        valve;          // Valve to thermostat node's room open
+} gwStruct;
+gwStruct returnData;
 
-void setup()
-{
+void setup() {
     // Setup serial line for debugging
     Serial.begin(SERIAL_BAUD);
     Serial.println("Thermostat initialising");
     radio.initialize(FREQUENCY,NODEID,NETWORKID);
     radio.encrypt(KEY);
+    radio.promiscuous(promiscuousMode);
     char buff[50];
     sprintf(buff, "\nTransmitting at %d Mhz...", FREQUENCY==RF69_433MHZ ? 433 : FREQUENCY==RF69_868MHZ ? 868 : 915);
     Serial.println(buff);
     sprintf(buff, "Encryption key: %s", KEY);
     Serial.println(buff);
     radio.sleep();
-    // Setup LCD
-    // display.setDimensions(2, 16);
-    // display.print("Chauffeino", 0, 0);
+    // Print boot text
+    display.printId("Chauffeino");
     // Setup thermal sensor
     pinMode(sensorPin, INPUT);
     sensors.begin();
@@ -100,19 +129,23 @@ void setup()
         sprintf(buff, "Sensor ID: %s", sensorString);
         Serial.println(buff);
         if (sensor[0] == DS18B20MODEL || sensor[0] == DS1825MODEL || sensor[0] == DS1822MODEL)
-            sensors.setResolution(sensor, 12);
+        resolution = 12;
         else if (sensor[0] == DS18S20MODEL)
-            sensors.setResolution(sensor, 9);
+            resolution = 9;
         else {
             Serial.println("Sensors found, but not Dallas DS18x20 family.\nTerminating.");
-            // display.print("SENSOR ERROR!!!", 1, 0);
+            display.printError("SENSOR ERROR!!!");
             flushSerial();
             LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
         }
+        sensors.setResolution(sensor, resolution);
+        sensors.requestTemperaturesByAddress(sensor);
+        delayInMillis = 750 / (1 << (12 - resolution));
+        lastTempRequest = millis();
         int resolution = sensors.getResolution(sensor);
         sprintf(buff, "Sensor resolution: %d", resolution);
         Serial.println(buff);
-        // display.print(buff, 1, 0);
+        display.printId(buff);
         // With that done, let's get ourselves a node ID, shall we?
         /*
         radio.Initialize(BOOT_NODEID, FREQUENCY, NETWORKID);
@@ -121,13 +154,13 @@ void setup()
         msg += sensor_string;
         radio.Send(GATEWAYID, &msg, msg.length());
         */
-        reportData.nodeId = NODEID;
+        reportData.low_batt = false;
         for (uint8_t i = 0; i<16; i++) {
             reportData.sensorId[i] = sensorString[i];
         }
     } else {
         Serial.println("No sensors found.\nTerminating.");
-        // display.print("SENSOR ERROR!!!", 1, 0);
+        display.printError("SENSOR ERROR!!!");
         flushSerial();
         LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     }
@@ -135,55 +168,80 @@ void setup()
 }
 
 
-void loop()
-{
+void loop() {
+    String room = "Living Room";
     // Check battery level every hour
     batt_counter = (batt_counter + 1) % 60;
     // Resetting Low Battery warning should require a reset or restart
     if (! low_batt && batt_counter == 0) {
         if (readVccMv() < min_vcc) {
-            low_batt = true;
+            reportData.low_batt = true;
         }
     }
     // Get temperature in °C
-    Serial.println("Requesting temperature");
-    sensors.requestTemperaturesByAddress(sensor);
-    float tempC = sensors.getTempC(sensor);
+    // Wait required time for DS18x20 to report
+    //if (millis() - lastTempRequest >= delayInMillis) {
+        tempC = sensors.getTempC(sensor);
+        sensors.requestTemperaturesByAddress(sensor);
+        lastTempRequest = millis();
+    //}
     // Update display
-    // display.setId(room);
-    // display.setTemperatures(tempC, heatDemand);
-    // display.clear();
-    // display.printTemperatures(low_batt);
-    // display.printId();
+    display.setId(room);
+    display.setTemperatures(tempC, heatDemand);
+    display.clear();
+    display.printTemperatures(low_batt);
+    display.printId();
     Serial.print("Temperature: ");
     Serial.println(tempC);
-    // and store it in the output buffer at position bufferPos.
-    buffer[bufferPos] = tempC;
-    // rotate to next position in output buffer.
-    bufferPos = (bufferPos + 1) % bufferSize;
     reportData.temp = tempC;
-    if (radio.sendWithRetry(GATEWAYID, (const void*)(&reportData), sizeof(reportData)))
-      Serial.print(" ok!");
-    else Serial.print(" nothing...");
-    Serial.println();
-    // If buffer full, report wirelessly and clear buffer
-    if (not bufferPos) {
-        // TODO: report *wirelessly*
-        for (int i = 0; i < bufferSize; i++) {
-            Serial.print("Temp ");
-            Serial.print(i);
-            Serial.print(": ");
-            Serial.println(buffer[i]);
+    Serial.print("  Transmitting:");
+    if (radio.sendWithRetry(GATEWAYID, (const void*)(&reportData), sizeof(reportData))) {
+        Serial.println(" OK!");
+    } else {
+        Serial.println(" nothing...");
+    }
+    lastSend = millis();
+    failNotified = false;
+    Serial.print("  Receiving:");
+    while (millis() - lastSend < RECV_TIMEOUT) {
+        if (radio.receiveDone()) {
+            Blink(LED,3);
+            Serial.println(" OK!");
+            if (radio.DATALEN != sizeof(gwStruct)) {
+               Serial.println(" Invalid tempStruct received, not matching tempStruct struct!");
+            } else {
+                returnData = *(gwStruct*)radio.DATA;
+                Serial.print("Date: ");
+                Serial.println(returnData.curDate);
+                Serial.print("Time: ");
+                Serial.println(returnData.curTime);
+                Serial.print("Temp: ");
+                Serial.print(reportData.temp);
+                Serial.print("/");
+                Serial.println(returnData.targetTemp);
+                Serial.print("Burn: ");
+                Serial.println(returnData.burner ? "On" : "Off");
+                Serial.print("Valv: ");
+                Serial.println(returnData.valve ? "On" : "Off");
+                if (radio.ACKRequested()) {
+                    byte theNodeID = radio.SENDERID;
+                    radio.sendACK();
+                }
+            }
+            break;
+        } else if (!failNotified) {
+            Serial.println(" nothing...");
+            failNotified = true;
         }
-        // TODO: listen for commands from controller
     }
     // Sleep for a minute
+    radio.sleep();
     flushSerial();
-    // for (int i=0; i<6; i++) {
+    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+    // for (int i=0; i<SLEEP_LOOPS; i++) {
     //     LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
     //     LowPower.powerDown(SLEEP_2S, ADC_OFF, BOD_OFF);
     // }
-    LowPower.powerDown(SLEEP_2S, ADC_OFF, BOD_OFF);
 }
 
 // Helper method to properly flush; HardwareSerial::flush() seems broken
@@ -245,4 +303,11 @@ int readVccMv() {
   //result = 1125300L / result; // Calculate Vcc (in mV); 1125300 = 1.1*1023*1000
   result = scaleConst / result; // Calculate Vcc (in mV); 1125300 = 1.1*1023*1000
   return (int)result; // Vcc in millivolts
+}
+
+void Blink(byte PIN, int DELAY_MS) {
+    pinMode(PIN, OUTPUT);
+    digitalWrite(PIN,HIGH);
+    delay(DELAY_MS);
+    digitalWrite(PIN,LOW);
 }
