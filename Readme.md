@@ -1,6 +1,8 @@
 ChauffeIno
 ==========
 
+**Superseded by HA configuration. This project is incomplete and no longer maintained.**
+
 Intelligently control the central heating unit (burner, solenoid valves) via wireless thermostats based on [Moteino](http://lowpowerlab.com/moteino/)s (Small low-power radio-enabled Arduino clones) and a [Raspberry Pi](http://www.raspberrypi.org/).
 
 Arduino library requirements:
